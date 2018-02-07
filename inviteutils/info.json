@@ -1,0 +1,8 @@
+{
+    "AUTHOR" : "DevilXD",
+    "INSTALL_MSG" : "A install message that appears as soon as the end user does !cog install repo cogname",
+    "NAME" : "InviteUtils",
+    "SHORT" : "Welcome/leave messages and invite-role binds.",
+    "DESCRIPTION" : "Fully customizable welcoming and leaving messages, with an option to link an invite with a role that'll be granted when joining with said invite.",
+    "TAGS" : ["welcome", "leave", "message", "invite", "role"],
+}
