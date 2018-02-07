@@ -34,7 +34,6 @@ class InviteUtils:
             "join": False,
             "leave": False,
             "botrole": None,
-            "botroletoggle": False,
             "invites": {},
         }
 
@@ -94,12 +93,12 @@ class InviteUtils:
         return False
 
     @commands.group(pass_context=True, no_pm=True)
-    async def invutil(self, ctx):
+    async def invutils(self, ctx):
         """Customize your inviting experience."""
         if ctx.invoked_subcommand is None:
             await self.bot.send_cmd_help(ctx)
 
-    @invutil.command(pass_context=True)
+    @invutils.command(pass_context=True)
     async def examples(self, ctx):
         """Shows some examples for the messages."""
         msg = """
@@ -124,7 +123,7 @@ Message Examples:
         {0.name} has just left {1.name}! Bye {0.name}, hope you had a good stay!"""
         await self.bot.say("**Here are some examples!**\n\n" + "```css\n" + msg + "```")
 
-    @invutil.command(pass_context=True)
+    @invutils.command(pass_context=True)
     async def info(self, ctx):
         """Shows the current InviteUtils settings for this server."""
         server = ctx.message.server
@@ -133,13 +132,17 @@ Message Examples:
         e = discord.Embed()
         role = discord.utils.get(server.roles, id=self.set[server.id]["botrole"])
         channel = self.bot.get_channel(self.set[server.id]["channel"])
+        c = 0
+        for inv in self.set[server.id]["invites"]:
+            if "role" in self.set[server.id]["invites"][inv]:
+                c+=1
         e.set_author(name="Settings for " + server.name, icon_url=server.icon_url)
-        e.add_field(name="Channel:", value="#" + channel.name if channel else None, inline=True)
-        e.add_field(name="Join Message Enabled:", value=self.set[server.id]["join"], inline=True)
-        e.add_field(name="Leave Message Enabled:", value=self.set[server.id]["leave"], inline=True)
+        e.add_field(name="Channel:", value="#" + channel.name if channel else None)
+        e.add_field(name="Join Message Enabled:", value=self.set[server.id]["join"])
+        e.add_field(name="Leave Message Enabled:", value=self.set[server.id]["leave"])
         e.add_field(name="Bot Role:", value=role.name if role else None)
-        e.add_field(name="Bot Role Enabled:", value=self.set[server.id]["botroletoggle"])
-        e.add_field(name="Embed", value=self.set[server.id]["embed"], inline=True)
+        e.add_field(name="Embed", value=self.set[server.id]["embed"])
+        e.add_field(name="Role-invite links:", value=c)
         e.add_field(name="Join Message:", value=self.set[server.id]["joinmessage"], inline=False)
         e.add_field(name="Leave Message:", value=self.set[server.id]["leavemessage"], inline=False)
         try:
@@ -148,11 +151,11 @@ Message Examples:
             await self.bot.say(e)
         await self.inv_update(server)
 
-    @invutil.command(pass_context=True)
+    @invutils.command(pass_context=True)
     async def channel(self, ctx, *, channel: discord.Channel):
-        """Sets the channel for the welcome/leave messages."""
+        """Sets the channel for the welcome/leave messages. Set to 'none' to disable."""
         server = ctx.message.server
-        if channel not in self.bot.get_all_channels():
+        if channel is None or channel not in self.bot.get_all_channels():
             await self.bot.say("That channel doesn't seem to exist - I can't see it!")
             return
         if server.me.permissions_in(channel).send_messages:
@@ -164,7 +167,7 @@ Message Examples:
         else:
             await self.bot.say("I don't have the `send_messages` permission in {}.".format(channel.mention))
 
-    @invutil.command(pass_context=True)
+    @invutils.command(pass_context=True)
     async def joinmessage(self, ctx, *, message: str):
         """Sets the 'join' message."""
         server = ctx.message.server
@@ -174,7 +177,7 @@ Message Examples:
         await self.bot.say("Join message has been set.")
         self.save()
 
-    @invutil.command(pass_context=True)
+    @invutils.command(pass_context=True)
     async def leavemessage(self, ctx, *, message: str):
         """Sets the 'leave' message."""
         server = ctx.message.server
@@ -184,14 +187,14 @@ Message Examples:
         await self.bot.say("Leave message has been set.")
         self.save()
 
-    @invutil.command(pass_context=True)
-    async def botrole(self, ctx, *, rolename: str):
+    @invutils.command(pass_context=True)
+    async def botrole(self, ctx, *, role_name: str):
         """Sets the role to be added to bots on join. Set to 'none' to disable."""
         server = ctx.message.server
         if server.id not in self.set:
             self.server_init(server)
-        if rolename.lower().strip() != "none":
-            role = discord.utils.get(server.roles, name=rolename)
+        if role_name.lower().strip() != "none":
+            role = discord.utils.get(server.roles, name=role_name)
             if role is None:
                 await self.bot.say("That role doesn't seem to exist.")
                 return
@@ -212,56 +215,53 @@ Message Examples:
         elif server.me.top_role <= role:
             await self.bot.say("That role is higher or equal with my highest role - I can't assign that!")
 
-    @invutil.command(pass_context=True)
+    @invutils.command(pass_context=True)
     async def embed(self, ctx):
         """Toggles between text or embeds."""
         server = ctx.message.server
         channel = discord.utils.get(self.bot.get_all_channels(), id=self.set[server.id]["channel"])
         if server.id not in self.set or channel is None:
-            await self.bot.say(":x: **There's nothing to toggle just yet. Try using other commands first.**")
+            await self.bot.say(":x: **There's nothing to toggle just yet. Try setting a channel first.**")
             return
         if not server.me.permissions_in(channel).embed_links:
             await self.bot.say("Was unable to embed a message. Need EMBED_LINKS permission.")
             return
-        if self.set[server.id]["embed"] is False:
-            self.set[server.id]["embed"] = True
+        self.set[server.id]["embed"] = not self.set[server.id]["embed"]     # toggle
+        if self.set[server.id]["embed"] is True:
             await self.bot.say("Messages will now be embedded.")
-        elif self.set[server.id]["embed"] is True:
-            self.set[server.id]["embed"] = False
+        else:
             await self.bot.say("Messages will no longer be embedded.")
         self.save()
 
-    @invutil.command(pass_context=True)
+    @invutils.command(pass_context=True)
     async def togglej(self, ctx):
         """Enable/disable the join message."""
         server = ctx.message.server
         if server.id not in self.set:
-            await self.bot.say(":x: **There's nothing to toggle just yet. Try using other commands first.**")
+            await self.bot.say(":x: **There's nothing to toggle just yet. Try setting a channel first.**")
             return
-        if self.set[server.id]["join"] is False:
-            self.set[server.id]["join"] = True
+        self.set[server.id]["join"] = not self.set[server.id]["join"]       # toggle
+        if self.set[server.id]["join"] is True:
             await self.bot.say("Join messages are now enabled.")
-        elif self.set[server.id]["join"] is True:
-            self.set[server.id]["join"] = False
+        else:
             await self.bot.say("Join messages are now disabled.")
         self.save()
 
-    @invutil.command(pass_context=True)
+    @invutils.command(pass_context=True)
     async def togglel(self, ctx):
         """Enable/disable the leave message."""
         server = ctx.message.server
         if server.id not in self.set:
-            await self.bot.say(":x: **There's nothing to toggle just yet. Try using other commands first.**")
+            await self.bot.say(":x: **There's nothing to toggle just yet. Try setting a channel first.**")
             return
+        self.set[server.id]["leave"] = not self.set[server.id]["leave"]
         if self.set[server.id]["leave"] is False:
-            self.set[server.id]["leave"] = True
             await self.bot.say("Leave messages are now enabled.")
-        elif self.set[server.id]["leave"] is True:
-            self.set[server.id]["leave"] = False
+        else:
             await self.bot.say("Leave messages are now disabled.")
         self.save()
 
-    @invutil.command(pass_context=True)
+    @invutils.command(pass_context=True)
     async def addrole(self, ctx, invite: str, *, rolename: str):
         """Bind a role to an invite (will be added on join)."""
         server = ctx.message.server
@@ -302,7 +302,7 @@ Message Examples:
                 return
         await self.bot.say("That invite doesn't seem to exist.")
 
-    @invutil.command(pass_context=True)
+    @invutils.command(pass_context=True)
     async def removerole(self, ctx, invite: str):
         """Unbind a role from an invite."""
         server = ctx.message.server
@@ -331,7 +331,7 @@ Message Examples:
                 await self.bot.say("Failed to unbind the role from the invite.")
             self.save()
 
-    @invutil.command(pass_context=True)
+    @invutils.command(pass_context=True)
     async def list(self, ctx):
         """List all invites with roles bound to them."""
         server = ctx.message.server
@@ -352,7 +352,7 @@ Message Examples:
         else:
             await self.bot.say("There's no invites with roles bound to them on this server!")
 
-    @invutil.command(pass_context=True)
+    @invutils.command(pass_context=True)
     async def disable(self, ctx):
         """Deletes all settings for the current server."""
         server = ctx.message.server
@@ -373,14 +373,14 @@ Message Examples:
         channel = self.set[server.id]["channel"]
         joinmessage = self.set[server.id]["joinmessage"]
         json_list = self.set[server.id]["invites"]
-        if channel is None or joinmessage is None or json_list is None:
+        if json_list is None:
             return
         try:
             invites = await self.bot.invites_from(server)
         except:
             await self.bot.say("There is no invites on this server.")
             return
-        if member.bot and self.set[server.id]["botroletoggle"] is True:
+        if member.bot and self.set[server.id]["botrole"] is not None:
             role = discord.utils.get(server.roles, id=self.set[server.id]["botrole"])
             if role is not None:
                 await asyncio.sleep(3)
@@ -397,7 +397,7 @@ Message Examples:
                         role = discord.Role(name="deleted-role", id=0, position=0, server=server)
                 else:
                     role = discord.Role(name="None", id=0, position=0, server=server)
-                if self.set[server.id]["join"] is True:
+                if self.set[server.id]["join"] is True and channel is not None and joinmessage is not None:
                     if self.set[server.id]["embed"]:
                         try:
                             e = discord.Embed(title="Member Joined!", description=joinmessage.format(member, server, inv, role), colour=discord.Color(value=self.joinmessage_color))
