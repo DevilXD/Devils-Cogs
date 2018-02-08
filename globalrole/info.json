@@ -1,0 +1,8 @@
+{
+    "AUTHOR" : "DevilXD",
+    "INSTALL_MSG" : "This one will allow you to manage roles on all server members at the same time!",
+    "NAME" : "GlobalRole",
+    "SHORT" : "Manage roles on all server members at the same time!",
+    "DESCRIPTION" : "Allows you to add or remove a certain role from all server members at the same time. Due to API limitations, this usually takes a while.",
+    "TAGS" : ["global", "role", "members"],
+}
