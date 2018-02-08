@@ -60,8 +60,6 @@ class GlobalRole:
                 await self.bot.add_roles(member, role)
             elif operation == "remove" and role in member.roles:
                 await self.bot.remove_roles(member, role)
-            elif self.stop == True:
-                break
             count += 1
             if count % 10 == 0:
                 try:
@@ -75,6 +73,8 @@ class GlobalRole:
                     elif operation == "remove":
                         msg = await self.bot.say(mrg.format(role.name, count, member_count))
                 member_count = len(server.members)
+            if self.stop == True:
+                break
         self.busy = False
         if msg is not None:
             await self.bot.delete_message(msg)
