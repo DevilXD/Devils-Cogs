@@ -93,6 +93,7 @@ class InviteUtils:
         return False
 
     @commands.group(pass_context=True, no_pm=True)
+    @checks.mod_or_permissions(manage_roles=True)
     async def invutils(self, ctx):
         """Customize your inviting experience."""
         if ctx.invoked_subcommand is None:
@@ -101,8 +102,7 @@ class InviteUtils:
     @invutils.command(pass_context=True)
     async def examples(self, ctx):
         """Shows some examples for the messages."""
-        msg = """
-You can customize your join/leave messages as follows:
+        msg = """You can customize your join/leave messages as follows:
     {0} is the user.
     {1} is the server.
     {2} is the invite.
@@ -110,6 +110,7 @@ You can customize your join/leave messages as follows:
 Example formats:
     {0.mention} - mention the user.
     {0.name}    - say the user's name.
+    {0.id}      - user's ID.
     {1.name}    - name of the server
     {2.inviter} - name of the user that made the invite.
     {2.url}     - the invite link the user joined with.
@@ -386,8 +387,10 @@ Message Examples:
                 await asyncio.sleep(3)
                 await self.bot.add_roles(member, role)
         await asyncio.sleep(1)
+        invite = None
+        determined = False
         for inv in invites:
-            if inv.url in json_list and int(inv.uses) > int(json_list[inv.url]["uses"]):
+            if inv.url in json_list and int(inv.uses) == int(json_list[inv.url]["uses"])+1:
                 if "role" in json_list[inv.url]:
                     role = discord.utils.get(server.roles, id=json_list[inv.url]["role"])
                     if role is not None:
@@ -397,19 +400,43 @@ Message Examples:
                         role = discord.Role(name="deleted-role", id=0, position=0, server=server)
                 else:
                     role = discord.Role(name="None", id=0, position=0, server=server)
-                if self.set[server.id]["join"] is True and channel is not None and joinmessage is not None:
-                    if self.set[server.id]["embed"]:
-                        try:
-                            e = discord.Embed(title="Member Joined!", description=joinmessage.format(member, server, inv, role), colour=discord.Color(value=self.joinmessage_color))
-                            e.set_thumbnail(url=member.avatar_url)
-                            await self.bot.send_message(server.get_channel(channel), embed=e)
-                        except discord.Forbidden:
-                            await self.bot.send_message(server.get_channel(channel), "Was unable to embed a message. Need EMBED_LINKS permissions.")
-                        except:
-                            await self.bot.send_message(server.get_channel(channel), "Your `joinmessage` was improperly formatted!")
-                    else:
-                        await self.bot.send_message(server.get_channel(channel), joinmessage.format(member, server, inv, role))
-                    break
+                if invite is None:
+                    invite = inv    #found it!
+                    determined = True
+                else:
+                    determined = False
+            elif inv.url not in json_list and int(inv.uses) == 1:      #looks like we don't have that invite in the database yet but somebody just used it
+                if invite is None:
+                    invite = inv    #found it!
+                    determined = True
+                else:
+                    determined = False
+        if self.set[server.id]["join"] is True and channel is not None and joinmessage is not None:
+            if invite is None or determined is False:      #hmm, so it looks like the 'invite' the user joined with couldn't be determined, either the bot wasn't online when the last person joined, or the invite got it's uses used up completely
+                invite = discord.Invite(server=server, url="Unknown", inviter={"name": "Unknown", "discriminator": "0000", "id": 0}, code="Unknown", uses="Unknown", max_uses="Unknown")
+                role = discord.Role(name="None", id=0, position=0, server=server)
+            if self.set[server.id]["embed"]:
+                try:
+                    e = discord.Embed(title="Member Joined!", description=joinmessage.format(member, server, invite, role), color=self.joinmessage_color)
+                    e.set_thumbnail(url=member.avatar_url)
+                    await self.bot.send_message(server.get_channel(channel), embed=e)
+                except discord.Forbidden:
+                    await self.bot.send_message(server.get_channel(channel), "Was unable to embed a message. Need EMBED_LINKS permissions.")
+                    await self.bot.send_message(server.get_channel(channel), joinmessage.format(member, server, invite, role))
+                except Exception as e:
+                    await self.bot.send_message(server.get_channel(channel), "Your `joinmessage` was improperly formatted!:\n{}".format(e))
+            else:
+                try:
+                    await self.bot.send_message(server.get_channel(channel), joinmessage.format(member, server, invite, role))
+                except Exception as e:
+                    await self.bot.send_message(server.get_channel(channel), "Your `joinmessage` was improperly formatted!:\n{}".format(e))
+            if determined is False:
+                await self.bot.send_message(server.get_channel(channel), """The correct invite the user joined with couldn't be determined, possible causes are:
+```
+1. The user joined with an invite that had limited uses and it just ran out of uses.
+2. The database wasn't synced properly - probably because the bot wasn't online when the last user joined.
+Tip: Checking settings for the current server syncs the database. (info)
+```""")
         await self.inv_update(server)
 
     async def on_member_remove(self, member):
@@ -422,11 +449,12 @@ Message Examples:
             return
         if self.set[server.id]["embed"]:
             try:
-                e = discord.Embed(title="Member Left!", description=leavemessage.format(member, server), colour=discord.Colour(value=self.leavemessage_color))
+                e = discord.Embed(title="Member Left!", description=leavemessage.format(member, server), color=self.leavemessage_color)
                 e.set_thumbnail(url=member.avatar_url)
                 await self.bot.send_message(server.get_channel(channel), embed=e)
             except discord.Forbidden:
                 await self.bot.say("Was unable to embed a message. Need EMBED_LINKS permissions.")
+                await self.bot.send_message(server.get_channel(channel), leavemessage.format(member, server))
             except:
                 await self.bot.say("Your `leavemessage` was improperly formatted!")
         else:
