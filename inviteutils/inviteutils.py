@@ -38,6 +38,7 @@ class InviteUtils:
         }
 
     async def on_load_tasks(self):
+        await self.bot.wait_until_ready()
         for server in self.bot.servers:
             await self.inv_update(server)
 
@@ -367,6 +368,8 @@ Message Examples:
             self.save()
             await self.bot.say("Successfully deleted all settings for this server.")
 
+    
+
     async def on_member_join(self, member):
         server = member.server
         if server.id not in self.set:
@@ -381,6 +384,7 @@ Message Examples:
         except:
             await self.bot.say("There is no invites on this server.")
             return
+        role = discord.Role(name="None", id=0, position=0, server=server)
         if member.bot and self.set[server.id]["botrole"] is not None:
             role = discord.utils.get(server.roles, id=self.set[server.id]["botrole"])
             if role is not None:
@@ -396,10 +400,6 @@ Message Examples:
                     if role is not None:
                         await asyncio.sleep(3)
                         await self.bot.add_roles(member, role)
-                    else:
-                        role = discord.Role(name="deleted-role", id=0, position=0, server=server)
-                else:
-                    role = discord.Role(name="None", id=0, position=0, server=server)
                 if invite is None:
                     invite = inv    #found it!
                     determined = True
@@ -412,9 +412,8 @@ Message Examples:
                 else:
                     determined = False
         if self.set[server.id]["join"] is True and channel is not None and joinmessage is not None:
-            if invite is None or determined is False:      #hmm, so it looks like the 'invite' the user joined with couldn't be determined, either the bot wasn't online when the last person joined, or the invite got it's uses used up completely
+            if invite is None or determined is False: #couldn't determine the correct invite, switching to default
                 invite = discord.Invite(server=server, url="Unknown", inviter={"name": "Unknown", "discriminator": "0000", "id": 0}, code="Unknown", uses="Unknown", max_uses="Unknown")
-                role = discord.Role(name="None", id=0, position=0, server=server)
             if self.set[server.id]["embed"]:
                 try:
                     e = discord.Embed(title="Member Joined!", description=joinmessage.format(member, server, invite, role), color=self.joinmessage_color)
@@ -431,10 +430,11 @@ Message Examples:
                 except Exception as e:
                     await self.bot.send_message(server.get_channel(channel), "Your `joinmessage` was improperly formatted!:\n{}".format(e))
             if determined is False:
-                await self.bot.send_message(server.get_channel(channel), """The correct invite the user joined with couldn't be determined, possible causes are:
+                await self.bot.send_message(server.get_channel(channel), """The correct invite the last user joined with couldn't be determined, possible causes are:
 ```
 1. The user joined with an invite that had limited uses and it just ran out of uses.
-2. The database wasn't synced properly - probably because the bot wasn't online when the last user joined.
+2. The user that joined was a bot authorized by the OAuth2 system instead of the standard invite.
+3. The database wasn't synced properly - probably because the bot wasn't online when the last user joined.
 Tip: Checking settings for the current server syncs the database. (info)
 ```""")
         await self.inv_update(server)
