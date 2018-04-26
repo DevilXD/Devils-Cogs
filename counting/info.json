@@ -1,0 +1,8 @@
+{
+    "AUTHOR" : "DevilXD",
+    "INSTALL_MSG" : "This one will allow you to set a channel for counting",
+    "NAME" : "Counting",
+    "SHORT" : "Allow users to pass their time counting!",
+    "DESCRIPTION" : "Allows you to add a channel where the bot will look for counting and display it in the channel info as well",
+    "TAGS" : ["counting", "123", "idk"],
+}
