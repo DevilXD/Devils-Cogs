@@ -1,13 +1,11 @@
-import discord
-import datetime
 import os
-import asyncio
 import re
+import discord
+import asyncio
+import contextlib
 from discord.ext import commands
 from cogs.utils import checks
 from cogs.utils.dataIO import dataIO
-from cogs.utils.chat_formatting import box, pagify, escape_mass_mentions
-from random import choice
 
 __author__ = "DevilXD"
 
@@ -18,8 +16,25 @@ class Counting:
         self.bot = bot
         self.set = dataIO.load_json('data/counting/settings.json')
         self.shield = []
+        self.schedule_save = False
+        self.saving_task = None
+        self.bot.loop.create_task(self.update_topics())
+
+    async def update_topics(self):
+        await self.bot.wait_until_ready()
+        for server_id in self.set:
+            for channel_id in self.set[server_id]["channels"]:
+                channel = self.bot.get_server(server_id).get_channel(channel_id)
+                count = self.set[server_id]["channels"][channel_id]["count"]
+                goal = self.set[server_id]["channels"][channel_id]["goal"]
+                if goal > 0:
+                    await self.bot.edit_channel(channel,topic = "Next message must start with {} | Reach {} to complete.".format(count+1,goal))
+                else:
+                    await self.bot.edit_channel(channel,topic = "Next message must start with {}".format(count+1))
 
     def __unload(self):
+        if self.saving_task is not None:
+            self.saving_task.cancel()
         self.save()
 
     def save(self):
@@ -83,7 +98,11 @@ class Counting:
         self.set[server.id]["channels"][channel.id]["count"] = count
         self.set[server.id]["channels"][channel.id]["last"] = None
         self.save()
-        await self.bot.edit_channel(channel,topic = "Next message must start with {}".format(count+1))
+        goal = self.set[server_id]["channels"][channel_id]["goal"]
+        if goal > 0:
+            await self.bot.edit_channel(channel,topic = "Next message must start with {} | Reach {} to complete.".format(count+1,goal))
+        else:
+            await self.bot.edit_channel(channel,topic = "Next message must start with {}".format(count+1))
         await self.bot.say("Channel count set to {}!".format(count))
 
     @count.command(pass_context=True)
@@ -120,7 +139,16 @@ class Counting:
         else:
             await self.bot.edit_channel(channel,topic = "Next message must start with {}".format(current_count+1))
         await self.bot.say("Channel goal set to {}!".format(goal))
-    
+
+    async def wait_save(self):
+        self.schedule_save = False
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.sleep(600)
+        self.save()
+        self.saving_task = None
+        if self.schedule_save == True:
+            self.saving_task = self.bot.loop.create_task(self.wait_save())
+
     async def respond(self,message,response):
         if message.author.id not in self.shield:
             self.shield.append(message.author.id)
@@ -170,6 +198,11 @@ class Counting:
                 await self.bot.edit_channel(channel,topic = "Next message must start with {}".format(next_count+1))
             if next_count % 10 == 0:
                 self.save()
+            else:
+                if self.schedule_save == False:
+                    self.schedule_save = True
+                if self.saving_task is None:
+                    self.saving_task = self.bot.loop.create_task(self.wait_save())
         else:
             #Deny:
             await self.respond(message,"{} Your message needs to start with {}".format(message.author.mention,next_count))
