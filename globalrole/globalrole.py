@@ -46,11 +46,15 @@ class GlobalRole:
 
     @commands.group(pass_context=True, no_pm=True)
     @checks.mod_or_permissions(manage_roles=True)
-    async def globalrole(self, ctx, operation: str, *, role: str):
-        """Add or remove a role from all users. Use 'add', 'remove' or 'stop' as operations."""
-        if operation is None:
-            await self.bot.send_cmd_help(ctx)
-        valid_operations = ["add", "remove", "stop", "apply"]
+    async def globalrole(self, ctx, operation: str, *, role: str=None):
+        """Add or remove a role from all members. Use 'add', 'remove' or 'stop' as operations.
+        Examples:
+        globalrole add All          - adds the All role to all members
+        globalrole remove Other     - removes the Other role from all members
+        globalrole add Other;All    - adds the Other role to all members with the All role
+        globalrole remove All;Other - removes the All role from all members with the Other role
+        globalrole stop             - stops the current operation"""
+        valid_operations = ["add", "remove", "stop"]
         server = ctx.message.server
         author = ctx.message.author
         channel = ctx.message.channel
@@ -67,8 +71,19 @@ class GlobalRole:
                 await self.bot.say("There are no operations running right now!")
             return
         if self.busy == True:
-            await self.bot.say("Operation already running - check the last message for progress!\nUse `[p]globalrole stop <role_name>` to stop the current operation.")
+            await self.bot.say("Operation already running - check the last message for progress!\nUse `[p]globalrole stop` to stop the current operation.")
             return
+        if role is None:
+            await self.bot.send_cmd_help(ctx)
+            return
+        frole = None
+        if ';' in role:
+            role = role.split(';')
+            if len(role) > 2:
+                await self.bot.send_cmd_help(ctx)
+                return
+            frole = role[1]
+            role = role[0]
         role = discord.utils.get(server.roles, name=role)
         if role is None:
             await self.bot.say("That role doesn't seem to exist!")
@@ -82,60 +97,65 @@ class GlobalRole:
         if role >= server.me.top_role:
             await self.bot.say("That role is higher or equal with my highest role - I can't manage that!")
             return
-        if operation == "apply":
-            await self.bot.say("Please type in the role name that will be used to determine who will get the additional role applied:")
-            msg = await self.bot.wait_for_message(timeout=60, author=author, channel=channel)
-            if msg is None:
-                await self.bot.say(":x: You took too long to enter the role name!")
-            frole = discord.utils.get(server.roles, name=msg.content)
+        if frole is not None:
+            frole = discord.utils.get(server.roles, name=frole)
             if frole is None:
                 await self.bot.say("That role doesn't seem to exist!")
                 return
-        count = 0
-        member_count = len(server.members)
-        mag = "Adding `{}` role to all server members... ({}/{})"
-        mrg = "Removing `{}` role from all server members... ({}/{})"
-        myg = "Applying `{}` role to all server members with `{}` role... ({}/{})"
         if operation == "add":
-            desc = "You are about to add the `{}` role to all server members. Proceed?".format(role.name)
+            if frole is None:
+                text = "Adding `{}` role to all server members... ({}/{})"
+                desc = "You are about to add the `{}` role to all server members. Proceed?".format(role.name)
+            else:
+                text = "Adding `{}` role to all server members with `{}` role... ({}/{})"
+                desc = "You are about to add the `{}` role to all server members with the `{}` role. Proceed?".format(role.name, frole.name)
         elif operation == "remove":
-            desc = "You are about to remove the `{}` role from all server members. Proceed?".format(role.name)
-        elif operation == "apply":
-            desc = "You are about to apply the `{}` role to all server members with the `{}` role. Proceed?".format(role.name, frole.name)
+            if frole is None:
+                text = "Removing `{}` role from all server members... ({}/{})"
+                desc = "You are about to remove the `{}` role from all server members. Proceed?".format(role.name)
+            else:
+                text = "Removing `{}` role from all server members with `{}` role... ({}/{})"
+                desc = "You are about to remove the `{}` role from all server members with the `{}` role. Proceed?".format(role.name, frole.name)
         e = discord.Embed(description=desc)
         confirm = await self.confirm_msg(ctx, e, 60)
         if confirm is False:
             return
-        if operation == "add":
-            msg = await self.bot.say(mag.format(role.name, count, member_count))
-        elif operation == "remove":
-            msg = await self.bot.say(mrg.format(role.name, count, member_count))
-        elif operation == "apply":
-            msg = await self.bot.say(myg.format(role.name, frole.name, count, member_count))
+        count = 0
+        proc_count = 0
+        member_count = len(server.members)
+        if frole is None:
+            msg = await self.bot.say(text.format(role.name, count, member_count))
+        else:
+            msg = await self.bot.say(text.format(role.name, frole.name, count, member_count))
         self.busy = True
         for member in server.members:
             if operation == "add" and role not in member.roles:
-                await self.bot.add_roles(member, role)
+                if frole is None:
+                    await self.bot.add_roles(member, role)
+                    proc_count += 1
+                elif frole in member.roles:
+                    await self.bot.add_roles(member, role)
+                    proc_count += 1
             elif operation == "remove" and role in member.roles:
-                await self.bot.remove_roles(member, role)
-            elif operation == "apply" and frole in member.roles and role not in member.roles:
-                await self.bot.add_roles(member, role)
+                if frole is None:
+                    await self.bot.remove_roles(member, role)
+                    proc_count += 1
+                elif frole in member.roles:
+                    await self.bot.remove_roles(member, role)
+                    proc_count += 1
             count += 1
-            if count % 10 == 0:
+            if count % 100 == 0 or proc_count >= 10:
+                proc_count = 0
                 try:
-                    if operation == "add":
-                        msg = await self.bot.edit_message(msg, new_content=mag.format(role.name, count, member_count))
-                    elif operation == "remove":
-                        msg = await self.bot.edit_message(msg, new_content=mrg.format(role.name, count, member_count))
-                    elif operation == "apply":
-                        msg = await self.bot.edit_message(msg, new_content=myg.format(role.name, frole.name, count, member_count))
+                    if frole is None:
+                        msg = await self.bot.edit_message(msg, new_content=text.format(role.name, count, member_count))
+                    else:
+                        msg = await self.bot.edit_message(msg, new_content=text.format(role.name, frole.name, count, member_count))
                 except:
-                    if operation == "add":
-                        msg = await self.bot.say(mag.format(role.name, count, member_count))
-                    elif operation == "remove":
-                        msg = await self.bot.say(mrg.format(role.name, count, member_count))
-                    elif operation == "apply":
-                        msg = await self.bot.say(myg.format(role.name, frole.name, count, member_count))
+                    if frole is None:
+                        msg = await self.bot.say(text.format(role.name, count, member_count))
+                    else:
+                        msg = await self.bot.say(text.format(role.name, frole.name, count, member_count))
                 member_count = len(server.members)
             if self.stop == True:
                 break
@@ -147,11 +167,15 @@ class GlobalRole:
             self.stop = False
             return
         if operation == "add":
-            await self.bot.say("Added `{}` role to all server members! ({}/{})".format(role.name, count, member_count))
+            if frole is None:
+                await self.bot.say("Added `{}` role to all server members! ({}/{})".format(role.name, count, member_count))
+            else:
+                await self.bot.say("Added `{}` role to all server members with the `{}` role! ({}/{})".format(role.name, frole.name, count, member_count))
         elif operation == "remove":
-            await self.bot.say("Removed `{}` role from all server members! ({}/{})".format(role.name, count, member_count))
-        elif operation == "apply":
-            await self.bot.say("Applied `{}` role to all server members with the `{}` role! ({}/{})".format(role.name, frole.name, count, member_count))
+            if frole is None:
+                await self.bot.say("Removed `{}` role from all server members! ({}/{})".format(role.name, count, member_count))
+            else:
+                await self.bot.say("Removed `{}` role from all server members with the `{}` role! ({}/{})".format(role.name, frole.name, count, member_count))
 
 def setup(bot):
     bot.add_cog(GlobalRole(bot))
