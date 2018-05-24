@@ -141,13 +141,15 @@ class Counting:
         await self.bot.say("Channel goal set to {}!".format(goal))
 
     async def wait_save(self):
-        self.schedule_save = False
-        with contextlib.suppress(asyncio.CancelledError):
-            await asyncio.sleep(600)
-        self.save()
-        self.saving_task = None
-        if self.schedule_save == True:
-            self.saving_task = self.bot.loop.create_task(self.wait_save())
+        while self.schedule_save == True:
+            self.schedule_save = False
+            try:
+                await asyncio.sleep(600)
+            except asyncio.CancelledError:
+                self.save()
+                return
+            self.save()
+            self.saving_task = None
 
     async def respond(self,message,response):
         if message.author.id not in self.shield:
