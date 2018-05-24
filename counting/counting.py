@@ -98,7 +98,7 @@ class Counting:
         self.set[server.id]["channels"][channel.id]["count"] = count
         self.set[server.id]["channels"][channel.id]["last"] = None
         self.save()
-        goal = self.set[server_id]["channels"][channel_id]["goal"]
+        goal = self.set[server.id]["channels"][channel.id]["goal"]
         if goal > 0:
             await self.bot.edit_channel(channel,topic = "Next message must start with {} | Reach {} to complete.".format(count+1,goal))
         else:
